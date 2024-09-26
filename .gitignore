@@ -1,0 +1,7 @@
+*.csv
+
+# Data folder
+.money_man_data
+
+# VIM Swap file
+*.swp
