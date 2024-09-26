@@ -88,7 +88,6 @@ declare TABLE="none"
 declare TABLE_FILE=
 
 # TODO:
-#  - Finish implementing all planned/stub commands
 #  - Restructure code, clean up and do a bit of testing
 #  - Add account features: account metadata files
 #    - Starting monetary amount in account
@@ -100,9 +99,10 @@ declare TABLE_FILE=
 #    - Removing accounts
 #    - Removing tags
 #    - Table file validation at select to clear files if anything invalid
+#    - Command history
 
 # Main program loop
-while read -p "[${ACC}/${TABLE}]> " LINE
+while read -ep "[${ACC}/${TABLE}]> " LINE
 do
     # Parse line into array, taking quotes into consideration
     parsed=()
