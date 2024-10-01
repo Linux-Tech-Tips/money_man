@@ -58,6 +58,24 @@ verifyDir() {
     return 0
 }
 
+# Verify that ACC variable isn't "none"
+verifyAcc() {
+    [[ "${ACC}" == "none" ]] && {
+	echo "Please select account (using 'acc [account name]')"
+	return 1
+    }
+    return 0
+}
+
+# Verify that TABLE variable isn't "none"
+verifyTable() {
+    [[ "${TABLE}" == "none" ]] && {
+	echo "Please select table (using 'select <table name>')"
+	return 1
+    }
+    return 0
+}
+
 
 # PROGRAM SECTION
 
@@ -88,7 +106,6 @@ declare TABLE="none"
 declare TABLE_FILE=
 
 # TODO:
-#  - Restructure code, clean up and do a bit of testing
 #  - Add account features: account metadata files
 #    - Starting monetary amount in account
 #    - Tables being ordered in the account chronologically
@@ -170,10 +187,7 @@ do
 
 	list)
 	    # If account selected, list all tables in account
-	    [[ "${ACC}" == "none" ]] && {
-		echo "Please select account (using 'acc [account name]')"
-		continue
-	    }
+	    verifyAcc || continue
 	    find . -name "${ACC}-*" | sed "s/\.\/${ACC}-\(.*\)\.csv/\1/"
 	;;
 
@@ -183,10 +197,8 @@ do
 		echo "Please provide table to select"
 		continue
 	    }
-	    [[ "${ACC}" == "none" ]] && {
-		echo "Please select account (using 'acc [account name]')"
-		continue
-	    }
+	    verifyAcc || continue
+
 	    # Selecting desired table and checking if present
 	    tableFile="./${ACC}-${parsed[1]}.csv"
 	    [[ -e "${tableFile}" ]] || {
@@ -205,10 +217,8 @@ do
 
 	print)
 	    # Check if table selected
-	    [[ "${TABLE}" == "none" ]] && {
-		echo "Please select table (using 'select <table name>')"
-		continue
-	    }
+	    verifyTable || continue
+
 	    # Print N lines
 	    [[ -z "${parsed[1]}" ]] && {
 		sort -k5r -t"," "${TABLE_FILE}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t
@@ -219,19 +229,18 @@ do
 
 	add)
 	    # Validate add command
-	    [[ "${TABLE}" == "none" ]] && {
-		echo "Please select table (using 'select <table name>')"
-		continue
-	    }
+	    verifyTable || continue
 	    [[ ${#parsed[@]} -ne 5 ]] && {
 		echo "Please use specified add format: 'add <desc> <amount> <tag> <date>'"
 		continue
 	    }
+
 	    # Validate if tag exists
 	    grep -q "^${parsed[3]}$" "${TAG_FILE}" || {
 		echo "Tag ${parsed[3]} not found. See existing tags using 'tag' or create a new one using 'tag [name]'"
 		continue
 	    }
+
 	    # Get last line ID
 	    lastID=$(sort -k1r "${TABLE_FILE}" | head -n1 | sed -ne "s/^\([0-9]\+\),.*/\1/p")
 	    ID=$((${lastID} + 1))
@@ -241,10 +250,7 @@ do
 
 	rm)
 	    # Validate rm command
-	    [[ "${TABLE}" == "none" ]] && {
-		echo "Please select table (using 'select <table name>')"
-		continue
-	    }
+	    verifyTable || continue
 	    [[ ${#parsed[@]} -ne 2 ]] && {
 		echo "Please use specified rm format: 'rm <id to remove>'"
 		continue
@@ -253,6 +259,8 @@ do
 		echo "ID ${parsed[1]} not found in table ${TABLE}"
 		continue
 	    }
+	    
+	    # Remove record from table file
 	    sed -e "/^${parsed[1]},/d" -i "${TABLE_FILE}"
 	;;
 
@@ -289,25 +297,24 @@ do
 	;;
 
 	export)
-	    [[ "${TABLE}" == "none" ]] && {
-		echo "Please select table (using 'select <table name>')"
-		continue
-	    }
+	    # Verify that table to export exists
+	    verifyTable || continue
+
+	    # Exporting table to file with an appropriate name
 	    expName=$([[ ${#parsed[@]} -lt 2 ]] && echo "${TABLE}.csv" || echo "${parsed[1]}")
 	    expName="${RUN_DIR}/${expName}"
 	    cp "${TABLE_FILE}" "${expName}"
+
+	    # Let the user know where the exported table is
 	    echo "Exported table ${TABLE} to ${expName}"
 	;;
 
 	import)
-	    [[ "${TABLE}" == "none" ]] && {
-		echo "Please select table (using 'select <table name>')"
-		continue
-	    }
-
-	    file="${RUN_DIR}/${parsed[1]}"
+	    # Verify that table to import into selected
+	    verifyTable || continue
 
 	    # Validate file argument
+	    file="${RUN_DIR}/${parsed[1]}"
 	    [[ -f "${file}" ]] || {
 		echo "Please specify a valid file to import (file '${file}' is not valid)"
 		continue
@@ -316,6 +323,7 @@ do
 	    # Get biggest/last ID
 	    ID=$(sort -k1r "${TABLE_FILE}" | head -n1 | sed -ne "s/^\([0-9]\+\),.*/\1/p")
 
+	    # Import lines from given file into current table, using ID based on current table
 	    while read line
 	    do
 		[[ -z "${line}" ]] || {
@@ -323,6 +331,8 @@ do
 		    echo "${ID}, $(sed -ne "s/^[0-9]\+,\s*\(.*\)/\1/p" <<< "${line}")" >> "${TABLE_FILE}"
 		}
 	    done < "${file}"
+
+	    # Let the user know what import happened where
 	    echo "Imported table '${file}' into the currently selected table '${TABLE}'"
 	;;
 
@@ -330,6 +340,8 @@ do
 	    echo "Error: Command '${cmd}' not recognized. Try help"
     esac
 
+    # Clearing line for the next read call
     LINE=
+
 done
 
