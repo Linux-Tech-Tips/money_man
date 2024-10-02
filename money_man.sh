@@ -76,6 +76,14 @@ verifyTable() {
     return 0
 }
 
+# Prints the totals for a table file given in ${1}
+tableTotals() {
+    # Check that desired fule exists
+    [[ -f "${1}" ]] || return 1
+    result=$(column -s',' -t -H1,2,4,5 "${1}" | paste -sd+ | bc)
+    [[ -z "${result}" ]] && echo "0" || echo "${result}"
+}
+
 
 # PROGRAM SECTION
 
@@ -107,11 +115,8 @@ declare TABLE_FILE=
 
 # TODO:
 #  - Add account features: account metadata files
-#    - Starting monetary amount in account
-#    - Tables being ordered in the account chronologically
-#    - Totals either for all tables, or up to a certain table
-#    - Statistics for all account
-#    - Statistics for specific table
+#    - Statistics about spending for all account (breakdown by tag, average table entry, average daily entry/grouped by date, any unexpectedly big values)
+#    - Statistics about spending for specific table
 #  - Add QOL features:
 #    - Removing accounts
 #    - Removing tags
@@ -139,6 +144,9 @@ do
 	    echo " - help ............................... shows help info"
 	    echo " - acc ................................ shows existing accounts"
 	    echo " - acc [account name] ................. sets the current account to be the given account name, if nonexistent, creates new account"
+	    echo " - info ............................... shows information about the current account, including the starting and current balance"
+	    echo " - log ................................ shows a table-wise account log, displaying all included tables and the balance after each"
+	    echo " - balance [new starting balance] ..... shows info about the current balance, or sets the starting balance to the given value"
 	    echo " - list ............................... lists tables in the account, typically this would be months"
 	    echo " - select <table name> ................ selects the specified table from the account, if nonexistent, creates new table"
 	    echo " - print [num lines] .................. prints num lines of content from the current table, or all if blank or <0, sorted by date"
@@ -173,8 +181,14 @@ do
 			continue
 		    }
 		}
+
 		# Use current account
 		ACC="${parsed[1]}"
+		# Check if account data file exists, create if not
+		[[ -f "./${ACC}.dat" ]] || {
+		    echo "0" > "./${ACC}.dat"
+		}
+
 		# Reset selected table
 		TABLE="none"
 		TABLE_FILE=
@@ -182,6 +196,62 @@ do
 		# Display all existing accounts
 		echo "Existing Accounts:"
 		cat "${ACC_FILE}"
+	    }
+	;;
+
+	info)
+	    verifyAcc || continue
+
+	    # Get current balance
+	    balance=$(cat "./${ACC}.dat")
+
+	    # Get balance for each table in the account
+	    tableBalance=0
+	    for file in $(find . -name "${ACC}-*"); do
+		fileBalance=$(tableTotals "${file}")
+		tableBalance=$(echo "$tableBalance + $fileBalance" | bc)
+	    done
+	    # Get final balance
+	    finalBalance=$(echo "$balance + $tableBalance" | bc)
+
+	    # Print account details
+	    echo "Account ${ACC}:"
+	    echo " - Starting balance: ${balance}"
+	    echo " - Final balance: ${finalBalance}"
+	;;
+
+	log)
+	    verifyAcc || continue
+
+	    # Get current balance
+	    balance=$(cat "./${ACC}.dat")
+
+	    # Print start info
+	    echo "Account ${ACC} table log:"
+	    echo "Starting balance: ${balance}"
+
+	    # Go through each file, extract file totals, write details
+	    for file in $(find . -name "${ACC}-*" | sort); do
+		fileBalance=$(tableTotals "${file}")
+		balance=$(echo "$balance + $fileBalance" | bc)
+		echo "---"
+		echo "Table $(echo ${file} | sed "s/\.\/${ACC}-\(.*\)\.csv/\1/"):"
+		echo " - Table final balance: ${fileBalance}"
+		echo " - Account final balance: ${balance}"
+	    done
+	    echo "---"
+	;;
+
+	balance)
+	    verifyAcc || continue
+
+	    [[ ${#parsed[@]} -gt 1 ]] && {
+		# Changing starting account balance
+		echo "${parsed[1]}" > "${ACC}.dat"
+		echo "Updated account ${ACC} starting balance to ${parsed[1]}"
+	    } || {
+		# Displaying account balance
+		echo "Account ${ACC} starting balance: $(cat ${ACC}.dat)"
 	    }
 	;;
 
