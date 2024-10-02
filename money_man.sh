@@ -11,25 +11,6 @@
 #  - The monthly logs can be exported into a CSV format, so that it can be imported into any standard editing software
 #  - Any CSV logs can be imported into this program into any month
 
-# Program:
-# money_man.sh [name of project directory to use]
-#  - interactive shell until the user exits, basically with commands
-#  - terminal: `[no account/no month]> `
-#
-# Commands:
-#  - help ............................... shows help info
-#  - acc ................................ shows existing accounts
-#  - acc [account name] ................. sets the current account to be the given account name, if nonexistent, creates new account
-#  - list ............................... lists tables in the account, typically this would be months
-#  - select <table name> ................ selects the current table from the account
-#  - print [num lines] .................. prints num lines of content from the current table, or all if blank or <0, sorted by date
-#  - add <desc> <amount> <tag> <date> ... adds a line to the table with the given info, use quotes for spaces
-#  - rm <id> ............................ removes the line with the specified ID
-#  - tag ................................ shows existing tags available for entries
-#  - tag [tag name] ..................... shows details about existing tag or creates new if nonexistent
-#  - export [file name] ................. exports the current table from the current account into a file with the given name
-#  - import <csv name> .................. imports the rows from the given CSV file (if compatible) into the current table in the current account
-
 
 # FUNCTIONS
 
@@ -142,16 +123,22 @@ do
 	    echo "Money Man Help Menu"
 	    echo "Available Commands:"
 	    echo " - help ............................... shows help info"
+	    echo ""
+	    echo "Account Commands:"
 	    echo " - acc ................................ shows existing accounts"
 	    echo " - acc [account name] ................. sets the current account to be the given account name, if nonexistent, creates new account"
 	    echo " - info ............................... shows information about the current account, including the starting and current balance"
 	    echo " - log ................................ shows a table-wise account log, displaying all included tables and the balance after each"
 	    echo " - balance [new starting balance] ..... shows info about the current balance, or sets the starting balance to the given value"
+	    echo ""
+	    echo "Table Commands:"
 	    echo " - list ............................... lists tables in the account, typically this would be months"
 	    echo " - select <table name> ................ selects the specified table from the account, if nonexistent, creates new table"
 	    echo " - print [num lines] .................. prints num lines of content from the current table, or all if blank or <0, sorted by date"
 	    echo " - add <desc> <amount> <tag> <date> ... adds a line to the table with the given info, use quotes for spaces"
 	    echo " - rm <id to remove> .................. removes the line with the specified ID"
+	    echo ""
+	    echo "Misc Commands:"
 	    echo " - tag ................................ shows existing tags available for entries"
 	    echo " - tag [tag name] ..................... shows details about existing tag or creates new if nonexistent"
 	    echo " - export [file name] ................. exports the current table from the current account into a file with the given name"
