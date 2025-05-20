@@ -32,7 +32,7 @@ verifyDir() {
 
     # Test directory permissions
     [[ -d "${1}" && -r "${1}" && -w "${1}" ]] || {
-	echo "Error: Project permissions incorrect"
+	echo "Error: Project permissions incorrect" >&2
 	return 1
     }
 
@@ -42,7 +42,7 @@ verifyDir() {
 # Verify that ACC variable isn't "none"
 verifyAcc() {
     [[ "${ACC}" == "none" ]] && {
-	echo "Please select account (using 'acc [account name]')"
+	echo "Please select account (using 'acc [account name]')" >&2
 	return 1
     }
     return 0
@@ -51,14 +51,29 @@ verifyAcc() {
 # Verify that TABLE variable isn't "none"
 verifyTable() {
     [[ "${TABLE}" == "none" ]] && {
-	echo "Please select table (using 'select <table name>')"
+	echo "Please select table (using 'select <table name>')" >&2
 	return 1
     }
     return 0
 }
 
+# Verify that the data in table ${1} is correct
+verifyTableData() {
+    pattern="^[0-9]+,[^,]*,[-0-9 \t]+,[^,]+,[-0-9 \t]+$"
+    while read line; do
+	[[ -z "${line}" || "${line}" =~ ${pattern} ]] || {
+	    echo "Error parsing table from file ${1}" >&2
+	    return 1
+	}
+    done < "${1}"
+    return 0
+}
+
 # Prints the totals for a table file given in ${1}
 tableTotals() {
+    # Ensure table correct
+    verifyTableData "${1}" || return 1
+
     # Check that desired fule exists
     [[ -f "${1}" ]] || return 1
     result=$(column -s',' -t -H1,2,4,5 "${1}" | paste -sd+ | bc)
@@ -150,7 +165,7 @@ do
 	    [[ -e "${ACC_FILE}" ]] || {
 		touch "${ACC_FILE}" || {
 		    # Error reporting if file can't be created
-		    echo "Error: Could not create Accounts file and none exists"
+		    echo "Error: Could not create Accounts file and none exists" >&2
 		    continue
 		}
 	    }
@@ -195,8 +210,7 @@ do
 	    # Get balance for each table in the account
 	    tableBalance=0
 	    for file in $(find . -name "${ACC}-*"); do
-		fileBalance=$(tableTotals "${file}")
-		tableBalance=$(echo "$tableBalance + $fileBalance" | bc)
+		fileBalance=$(tableTotals "${file}") && tableBalance=$(echo "$tableBalance + $fileBalance" | bc)
 	    done
 	    # Get final balance
 	    finalBalance=$(echo "$balance + $tableBalance" | bc)
@@ -219,8 +233,7 @@ do
 
 	    # Go through each file, extract file totals, write details
 	    for file in $(find . -name "${ACC}-*" | sort); do
-		fileBalance=$(tableTotals "${file}")
-		balance=$(echo "$balance + $fileBalance" | bc)
+		fileBalance=$(tableTotals "${file}") && balance=$(echo "$balance + $fileBalance" | bc)
 		echo "---"
 		echo "Table $(echo ${file} | sed "s/\.\/${ACC}-\(.*\)\.csv/\1/"):"
 		echo " - Table final balance: ${fileBalance}"
@@ -251,7 +264,7 @@ do
 	select)
 	    # If specified and exists, selects the desired table in the current account
 	    [[ ${#parsed[@]} -lt 2 ]] && {
-		echo "Please provide table to select"
+		echo "Please provide table to select" >&2
 		continue
 	    }
 	    verifyAcc || continue
@@ -288,13 +301,13 @@ do
 	    # Validate add command
 	    verifyTable || continue
 	    [[ ${#parsed[@]} -ne 5 ]] && {
-		echo "Please use specified add format: 'add <desc> <amount> <tag> <date>'"
+		echo "Please use specified add format: 'add <desc> <amount> <tag> <date>'" >&2
 		continue
 	    }
 
 	    # Validate if tag exists
 	    grep -q "^${parsed[3]}$" "${TAG_FILE}" || {
-		echo "Tag ${parsed[3]} not found. See existing tags using 'tag' or create a new one using 'tag [name]'"
+		echo "Tag ${parsed[3]} not found. See existing tags using 'tag' or create a new one using 'tag [name]'" >&2
 		continue
 	    }
 
@@ -309,11 +322,11 @@ do
 	    # Validate rm command
 	    verifyTable || continue
 	    [[ ${#parsed[@]} -ne 2 ]] && {
-		echo "Please use specified rm format: 'rm <id to remove>'"
+		echo "Please use specified rm format: 'rm <id to remove>'" >&2
 		continue
 	    }
 	    grep -q "^${parsed[1]}," "${TABLE_FILE}" || {
-		echo "ID ${parsed[1]} not found in table ${TABLE}"
+		echo "ID ${parsed[1]} not found in table ${TABLE}" >&2
 		continue
 	    }
 	    
@@ -326,7 +339,7 @@ do
 	    [[ -e "${TAG_FILE}" ]] || {
 		touch "${TAG_FILE}" || {
 		    # Error reporting if file can't be created
-		    echo "Error: Could not create Tags file and none exists"
+		    echo "Error: Could not create Tags file and none exists" >&2
 		    continue
 		}
 	    } 
@@ -394,7 +407,7 @@ do
 	;;
 
 	*)
-	    echo "Error: Command '${cmd}' not recognized. Try help"
+	    echo "Error: Command '${cmd}' not recognized. Try help" >&2
     esac
 
     # Clearing line for the next read call
