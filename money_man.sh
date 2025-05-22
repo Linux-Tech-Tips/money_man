@@ -11,6 +11,18 @@
 #  - The monthly logs can be exported into a CSV format, so that it can be imported into any standard editing software
 #  - Any CSV logs can be imported into this program into any month
 
+# Statistics stuff
+# The stats should be definable using a declaration oriented data manipulation language
+# Commands:
+#   - group <name | amount | tag | date>
+#   - ungroup
+#   - check <EXPR>
+#   - collapse <avg | min | max | sum | count>
+#   - select <name | amount | tag | date>
+# Executed one after another
+# How to make this:
+#   - group will be done using folders and subfiles, then check for each line in file, collapse for each file, select for each file
+
 
 # FUNCTIONS
 
@@ -78,6 +90,96 @@ tableTotals() {
     [[ -f "${1}" ]] || return 1
     result=$(column -s',' -t -H1,2,4,5 "${1}" | paste -sd+ | bc)
     [[ -z "${result}" ]] && echo "0" || echo "${result}"
+}
+
+# STATISTICS FUNCTIONS
+
+# Runs the stats commands given in ${1}
+runStats() {
+    [[ -d .stats_tmp ]] && rm -r .stats_tmp
+    mkdir .stats_tmp
+    cd .stats_tmp
+    cp "../${1}" .
+    tableGroup "./${1}" 4
+    ls .
+    tableUngroup "ungrouped.csv"
+    ls .
+    tableCheck "ungrouped.csv" "date >= \"2024-09-01\""
+    cat "ungrouped.csv"
+    tableGroup "ungrouped.csv" 4
+    ls .
+    for file in $(ls *.csv); do
+	tableCollapse "${file}" "avg"
+    done
+    tableUngroup "ungrouped.csv"
+    cat "ungrouped.csv"
+    tableSelect "ungrouped.csv" "3,4"
+    cat "ungrouped.csv"
+}
+
+# Split csv file given by ${1} into groups based on the column number given by ${2}
+tableGroup() {
+    awk "BEGIN { FS=\",\"; OFS=\",\" } { if(NF == 5) { name = \$${2}; gsub(/ /, \"\", name); print \$0 >> name\".csv\"; } }" "${1}"
+    rm "${1}"
+}
+
+# Join together csv files into file at ${1}
+tableUngroup() {
+    cat *.csv > "${1}_"
+    rm *.csv
+    mv "${1}_" "${1}"
+}
+
+# Check the table given by ${1}, only keep rows fitting the expression in ${2}
+#  - valid expression format: 'name|amount|tag|date' '<|>|<=|>=|==|!=|~|!~|in'  'value'
+tableCheck() {
+    regex="(name|amount|tag|date)[ \\t]*(\\<|\\>|\\<=|\\>=|==|!=|~|!~|in)[ \\t]*[^;]+"
+    [[ "${2}" =~ ${regex} ]] || {
+	echo "Invalid stats expression to check" >&2
+	return 1
+    }
+    expression="$(sed -e "s/^name/\$2/" -e "s/^amount/\$3/" -e "s/^tag/\$4/" -e "s/^date/\$5/" <<< "${2}")"
+    fieldNum="$(sed -e "s/\([^ \t]\+\).*/\1/" <<< "${expression}")"
+    awk "BEGIN { FS=\",\"; OFS=\",\" } { line=\$0; gsub(/ /, \"\", ${fieldNum}); if(${expression}) { print line } }" "${1}" > "${1}_"
+    mv "${1}_" "${1}"
+}
+
+# Collapse the table given by ${1} by the function given in ${2} (can be <avg | min | max | sum | count>) on the 'amount' field
+tableCollapse() {
+    itCode=""
+    endCode="print \"ERROR\""
+    # Get appropriate commands based on input op
+    case "${2}" in
+	"avg")
+	    itCode='sum += $3'
+	    endCode='print sum/NR'
+	;;
+	"min")
+	    itCode='if($3 < min) { min = $3 }'
+	    endCode='print min'
+	;;
+	"max")
+	    itCode='if($3 > max) { max = $3 }'
+	    endCode='print max'
+	;;
+	"sum")
+	    itCode='sum += $3'
+	    endCode='print sum'
+	;;
+	"count")
+	    itCode=''
+	    endCode='print NR'
+    esac
+    result="$(awk -F, "{ ${itCode} } END { ${endCode} }" "${1}")"
+    tags="$(awk -F, "{ arr[\$4] = \"\"; } END { for(i in arr) { printf i; }; print \"\" }" "${1}")"
+    dates="$(awk -F, "{ arr[\$5] = \"\"; } END { for(i in arr) { printf i; }; print \"\" }" "${1}")"
+    echo "0, table ${2}, ${result}, ${tags}, ${dates}" > "${1}"
+}
+
+# Select only the columns given in ${2} (comma-separated column number list) of the table given by ${1}
+tableSelect() {
+    awk -F, "BEGIN { split(\"${2}\", nums, \",\") } { for(i in nums) { if(i > 1) { printf \",\" }; printf \$nums[i] }; print \"\" }" "${1}" > "${1}_"
+    mv "${1}_" "${1}"
 }
 
 
@@ -152,6 +254,10 @@ do
 	    echo " - print [num lines] .................. prints num lines of content from the current table, or all if blank or <0, sorted by date"
 	    echo " - add <desc> <amount> <tag> <date> ... adds a line to the table with the given info, use quotes for spaces"
 	    echo " - rm <id to remove> .................. removes the line with the specified ID"
+	    echo ""
+	    echo "Stats Commands:"
+	    echo " - stats .............................. prints statistic information about the currently selected table" # TODO Implement
+	    echo " - "
 	    echo ""
 	    echo "Misc Commands:"
 	    echo " - tag ................................ shows existing tags available for entries"
@@ -364,6 +470,11 @@ do
 		echo "Existing Tags:"
 		cat "${TAG_FILE}"
 	    }
+	;;
+
+	stats)
+	    runStats "CZ_EUR-Thing1.csv"
+	
 	;;
 
 	export)
