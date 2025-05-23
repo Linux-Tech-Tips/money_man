@@ -96,38 +96,82 @@ tableTotals() {
 
 # Runs the stats commands given in ${1}
 runStats() {
-    [[ -d .stats_tmp ]] && rm -r .stats_tmp
-    mkdir .stats_tmp
-    cd .stats_tmp
-    cp "../${1}" .
-    tableGroup "./${1}" 4
-    ls .
-    tableUngroup "ungrouped.csv"
-    ls .
-    tableCheck "ungrouped.csv" "date >= \"2024-09-01\""
-    cat "ungrouped.csv"
-    tableGroup "ungrouped.csv" 4
-    ls .
-    for file in $(ls *.csv); do
-	tableCollapse "${file}" "avg"
+
+    # Supported Commands:
+    #   - group <name | amount | tag | date>
+    #   - ungroup
+    #   - check <EXPR>
+    #   - collapse <avg | min | max | sum | count>
+    #   - select <name | amount | tag | date>
+
+    # Split command string
+    OIFS=${IFS}
+    IFS=\;
+    read -a commands <<< "${1}"
+    IFS=${OIFS}
+
+    # Move appropriate file into a temporary directory
+    mkdir -p ./.stats_tmp
+    cp "${TABLE_FILE}" ./.stats_tmp/
+    pushd ./.stats_tmp > /dev/null
+
+    # Iterate through command string
+    for cmd in "${commands[@]}"; do
+	# For each command, split by space, then process
+	read -a args <<< ${cmd}
+	case "${args[0]}" in
+	    "group")
+		num="$(sed -n -e "s/.*name.*/2/p" -e "s/.*amount.*/3/p" -e "s/.*tag.*/4/p" -e "s/.*date.*/5/p" <<< "${args[1]}")"
+		[[ -z "${num}" ]] && echo "Stats error: incorrect argument for 'group': ${args[1]}" >&2 || {
+		    for file in $(find . -name "*.csv"); do
+			tableGroup "${file}" "${num}"
+		    done
+		}
+	    ;;
+	    "ungroup")
+		for file in $(find . -name "*.csv"); do
+		    folder="$(dirname ${file})"
+		    [[ -d "${folder}" ]] && tableUngroup "${folder}"
+		done
+	    ;;
+	    "check")
+		for file in $(find . -name "*.csv"); do
+		    tableCheck "${file}" "${args[1]}"
+		done
+	    ;;
+	    "collapse")
+		for file in $(find . -name "*.csv"); do
+		    tableCollapse "${file}" "${args[1]}"
+		done
+	    ;;
+	    "select")
+		nums="$(sed -e "s/name/2/" -e "s/amount/3/" -e "s/tag/4/" -e "s/date/5/" <<< "${args[1]}")"
+		for file in $(find . -name "*.csv"); do
+		    tableSelect "${file}" "${nums}"
+		done
+	    ;;
+	    *)
+		echo "Stats error: incorrect command ${args[0]}" >&2
+	esac
     done
-    tableUngroup "ungrouped.csv"
-    cat "ungrouped.csv"
-    tableSelect "ungrouped.csv" "3,4"
-    cat "ungrouped.csv"
+
+    cat ./*.csv
+    popd > /dev/null
+    rm -r ./.stats_tmp
 }
 
-# Split csv file given by ${1} into groups based on the column number given by ${2}
+# Split csv file given by ${1} into groups based on the column number given by ${2} and keep them in a directory ${1} (without extension)
 tableGroup() {
-    awk "BEGIN { FS=\",\"; OFS=\",\" } { if(NF == 5) { name = \$${2}; gsub(/ /, \"\", name); print \$0 >> name\".csv\"; } }" "${1}"
+    dirname="${1%.*}"
+    mkdir -p "${dirname}"
+    awk "BEGIN { FS=\",\"; OFS=\",\" } { if(NF == 5) { name = \$${2}; gsub(/ /, \"\", name); print \$0 >> \"${dirname}/\"name\".csv\"; } }" "${1}"
     rm "${1}"
 }
 
-# Join together csv files into file at ${1}
+# Join together csv files from folder ${1} into file '${1}.csv' which replaces the folder
 tableUngroup() {
-    cat *.csv > "${1}_"
-    rm *.csv
-    mv "${1}_" "${1}"
+    cat ${1}/*.csv > "${1}.csv"
+    rm -r "${1}"
 }
 
 # Check the table given by ${1}, only keep rows fitting the expression in ${2}
@@ -473,7 +517,13 @@ do
 	;;
 
 	stats)
-	    runStats "CZ_EUR-Thing1.csv"
+	    # Verify that table to run stats on set
+	    verifyTable || continue
+
+	    # TODO Reading stats commands and names from where?
+
+	    echo "AVERAGE SPEND PER CATEGORY:"
+	    runStats "${parsed[1]}"
 	
 	;;
 
