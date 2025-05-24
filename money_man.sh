@@ -136,7 +136,8 @@ runStats() {
 	    ;;
 	    "check")
 		for file in $(find . -name "*.csv"); do
-		    tableCheck "${file}" "${args[1]}"
+		    checkArg="${args[@]:1}"
+		    tableCheck "${file}" "${checkArg}"
 		done
 	    ;;
 	    "collapse")
@@ -179,7 +180,7 @@ tableUngroup() {
 tableCheck() {
     regex="(name|amount|tag|date)[ \\t]*(\\<|\\>|\\<=|\\>=|==|!=|~|!~|in)[ \\t]*[^;]+"
     [[ "${2}" =~ ${regex} ]] || {
-	echo "Invalid stats expression to check" >&2
+	echo "Invalid stats expression to check: '${2}'" >&2
 	return 1
     }
     expression="$(sed -e "s/^name/\$2/" -e "s/^amount/\$3/" -e "s/^tag/\$4/" -e "s/^date/\$5/" <<< "${2}")"
@@ -237,10 +238,11 @@ tableSelect() {
 # Program variables (environment-exportable configuration)
 [[ -z "${ACC_FILE}" ]] && ACC_FILE="accounts.dat"
 [[ -z "${TAG_FILE}" ]] && TAG_FILE="tags.dat"
+[[ -z "${STATS_FILE}" ]] && STATS_FILE="stats.dat"
 
 # Get project directory and verify permissions
 DIR="${1}"
-[[ -z ${dir} ]] && DIR=".money_man_data"
+[[ -z ${DIR} ]] && DIR=".money_man_data"
 
 verifyDir "${DIR}" || exit 1
 
@@ -299,15 +301,26 @@ do
 	    echo " - add <desc> <amount> <tag> <date> ... adds a line to the table with the given info, use quotes for spaces"
 	    echo " - rm <id to remove> .................. removes the line with the specified ID"
 	    echo ""
-	    echo "Stats Commands:"
-	    echo " - stats .............................. prints statistic information about the currently selected table" # TODO Implement
-	    echo " - "
-	    echo ""
 	    echo "Misc Commands:"
 	    echo " - tag ................................ shows existing tags available for entries"
 	    echo " - tag [tag name] ..................... shows details about existing tag or creates new if nonexistent"
 	    echo " - export [file name] ................. exports the current table from the current account into a file with the given name"
 	    echo " - import <csv name> .................. imports the rows from the given CSV file (if compatible) into the current table in the current account"
+	    echo ""
+	    echo "Stats Commands:"
+	    echo " - stats <function name> .............. runs the given statistics function on the currently selected table and prints results"
+	    echo " - stats list ......................... shows existing statistics functions (name -> code)"
+	    echo " - stats add .......................... prompts the user to add a new statistics function, or update an already existing one with new code"
+	    echo " - stats del .......................... prompts the user for a name of a statistics function to delete"
+	    echo ""
+	    echo "Stats Function Language Commands:"
+	    echo " - group <name|amount|tag|date> ....... groups the selected table into subtables based on the given column"
+	    echo " - ungroup ............................ joins the last grouped subtables together"
+	    echo " - check <EXPR> ....................... evaluates a logic expression (containing name|amount|tag|date left-hand side names) and keeps only true rows"
+	    echo " - collapse <avg|min|max|sum|count> ... collapses all rows by the amount column using the given function"
+	    echo " - select <name,amount,tag,date> ...... keeps only the columns provided in a comma-separated list of the given options"
+	    echo " - NOTE: All commands except for ungroup operate on either the selected table, or on all subtables separately if subtables exist"
+
 	;;
 
 	acc)
@@ -485,7 +498,7 @@ do
 	;;
 
 	tag)
-	    # Setup accounts file if nonexistent
+	    # Setup tags file if nonexistent
 	    [[ -e "${TAG_FILE}" ]] || {
 		touch "${TAG_FILE}" || {
 		    # Error reporting if file can't be created
@@ -517,14 +530,57 @@ do
 	;;
 
 	stats)
-	    # Verify that table to run stats on set
-	    verifyTable || continue
 
-	    # TODO Reading stats commands and names from where?
+	    # Set up stats commands file if not found
+	    [[ -e "${STATS_FILE}" ]] || {
+		touch "${STATS_FILE}" || {
+		    echo "Error: Could not create Stats functions file and none exists" >&2
+		    continue
+		}
+	    }
 
-	    echo "AVERAGE SPEND PER CATEGORY:"
-	    runStats "${parsed[1]}"
-	
+	    # Check that argument present
+	    [[ -z "${parsed[1]}" ]] && {
+		echo "Error: 'stats' needs one argument" >&2
+		continue
+	    }
+
+	    # Parsing arguments
+	    case "${parsed[1]}" in
+		"list")
+		    sed -e "s/\(^[^;]\+\);\(.*\)/\1 -> \2/" "${STATS_FILE}"
+		;;
+		"del")
+		    read -p "Which stats function to delete: " delName
+		    grep "^${delName};" "${STATS_FILE}" > /dev/null && {
+			sed -i -e "/^${delName};/d" "${STATS_FILE}"
+		    } || {
+			echo "Error: Can't delete stats function ${delName} as it doesn't exist" >&2
+		    }
+		;;
+		"add")
+		    read -p "Enter (unique) name of the stats function to add: " addName
+		    read -p "Enter stats function code: " addCode
+		    # Updating stats function if exists, otherwise appending new
+		    grep "^${addName};" "${STATS_FILE}" > /dev/null && {
+			sed -i -e "s/^\(${addName}\);.*/\1; ${addCode}/" "${STATS_FILE}"
+		    } || {
+			echo "${addName}; ${addCode}" >> "${STATS_FILE}"
+		    }
+		;;
+		*)
+		    # Before running stats functions, check that table selected
+		    verifyTable || continue
+
+		    # Run the actual stats function if found in the stats file
+		    grep "^${parsed[1]};" "${STATS_FILE}" > /dev/null && {
+			cmd="$(sed -ne "s/^${parsed[1]};\(.*\)/\1/p" "${STATS_FILE}")"
+			echo "Stats function: ${parsed[1]}"
+			runStats "${cmd}"
+		    } || {
+			echo "Error: Stats function '${parsed[1]}' not found (add using 'stats add')" >&2
+		    }
+	    esac
 	;;
 
 	export)
