@@ -71,7 +71,7 @@ verifyTable() {
 
 # Verify that the data in table ${1} is correct
 verifyTableData() {
-    pattern="^[0-9]+,[^,]*,[-0-9 \t]+,[^,]+,[-0-9 \t]+$"
+    pattern="^[0-9]+,[^,]*,[-0-9\. \t]+,[^,]+,[-0-9 \t]+$"
     while read line; do
 	[[ -z "${line}" || "${line}" =~ ${pattern} ]] || {
 	    echo "Error parsing table from file ${1}" >&2
@@ -260,11 +260,12 @@ declare TABLE_FILE=
 # TODO:
 #  - Add account features: account metadata files
 #    - Statistics about spending for all account (breakdown by tag, average table entry, average daily entry/grouped by date, any unexpectedly big values)
-#    - Statistics about spending for specific table
 #  - Add QOL features:
-#    - Removing accounts
-#    - Removing tags
-#    - Table file validation at select to clear files if anything invalid
+#    - Removing accounts, tags and tables
+#    - Unselect table, print with nothing selected prints everything
+#    - Stats with no table selected runs stats for each table separately
+#    - Table file validation at select to know if anything invalid
+#    - Renaming tags, accounts and tables
 #    - Command history
 
 # Main program loop
@@ -421,7 +422,7 @@ do
 	list)
 	    # If account selected, list all tables in account
 	    verifyAcc || continue
-	    find . -name "${ACC}-*" | sed "s/\.\/${ACC}-\(.*\)\.csv/\1/"
+	    find . -name "${ACC}-*" | sed "s/\.\/${ACC}-\(.*\)\.csv/\1/" | sort
 	;;
 
 	select)
@@ -438,7 +439,7 @@ do
 		read -p "Table '${parsed[1]}' not found. Create? (y/n) "
 		[[ "$REPLY" == "y"* || "$REPLY" == "Y"* ]] && {
 		    touch "${tableFile}"
-		    echo "Created account ${parsed[1]}"
+		    echo "Created table ${parsed[1]}"
 		} || {
 		    echo "Cancelled"
 		    continue
@@ -475,7 +476,7 @@ do
 	    }
 
 	    # Get last line ID
-	    lastID=$(sort -k1r "${TABLE_FILE}" | head -n1 | sed -ne "s/^\([0-9]\+\),.*/\1/p")
+	    lastID=$(sort -k1rn "${TABLE_FILE}" | head -n1 | sed -ne "s/^\([0-9]\+\),.*/\1/p")
 	    ID=$((${lastID} + 1))
 	    # Add line
 	    echo "${ID}, ${parsed[1]}, ${parsed[2]}, ${parsed[3]}, ${parsed[4]}" >> "${TABLE_FILE}"
