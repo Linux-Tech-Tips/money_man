@@ -98,11 +98,11 @@ tableTotals() {
 runStats() {
 
     # Supported Commands:
-    #   - group <name | amount | tag | date>
+    #   - group <name | amount | tag | date | table>
     #   - ungroup
     #   - check <EXPR>
     #   - collapse <avg | min | max | sum | count>
-    #   - select <name | amount | tag | date>
+    #   - select <name | amount | tag | date | table>
 
     # Split command string
     OIFS=${IFS}
@@ -112,7 +112,15 @@ runStats() {
 
     # Move appropriate file into a temporary directory
     mkdir -p ./.stats_tmp
-    cp "${TABLE_FILE}" ./.stats_tmp/
+    # Append table name as next column, join all tables if none selected
+    verifyTable 2> /dev/null && {
+	sed -e "s/\$/, $(basename ${TABLE_FILE})/" ${TABLE_FILE} > "./.stats_tmp/${TABLE_FILE}"
+    } || {
+	touch "./.stats_tmp/${ACC}.csv"
+	for file in ${ACC}-*; do
+	    sed -e "s/\$/, ${file}/" ${file} >> "./.stats_tmp/${ACC}.csv"
+	done
+    }
     pushd ./.stats_tmp > /dev/null
 
     # Iterate through command string
@@ -121,7 +129,7 @@ runStats() {
 	read -a args <<< ${cmd}
 	case "${args[0]}" in
 	    "group")
-		num="$(sed -n -e "s/.*name.*/2/p" -e "s/.*amount.*/3/p" -e "s/.*tag.*/4/p" -e "s/.*date.*/5/p" <<< "${args[1]}")"
+		num="$(sed -n -e "s/.*name.*/2/p" -e "s/.*amount.*/3/p" -e "s/.*tag.*/4/p" -e "s/.*date.*/5/p" -e "s/.*table.*/6/p" <<< "${args[1]}")"
 		[[ -z "${num}" ]] && echo "Stats error: incorrect argument for 'group': ${args[1]}" >&2 || {
 		    for file in $(find . -name "*.csv"); do
 			tableGroup "${file}" "${num}"
@@ -146,7 +154,7 @@ runStats() {
 		done
 	    ;;
 	    "select")
-		nums="$(sed -e "s/name/2/" -e "s/amount/3/" -e "s/tag/4/" -e "s/date/5/" <<< "${args[1]}")"
+		nums="$(sed -e "s/name/2/" -e "s/amount/3/" -e "s/tag/4/" -e "s/date/5/" -e "s/table/6/" <<< "${args[1]}")"
 		for file in $(find . -name "*.csv"); do
 		    tableSelect "${file}" "${nums}"
 		done
@@ -178,12 +186,12 @@ tableUngroup() {
 # Check the table given by ${1}, only keep rows fitting the expression in ${2}
 #  - valid expression format: 'name|amount|tag|date' '<|>|<=|>=|==|!=|~|!~|in'  'value'
 tableCheck() {
-    regex="(name|amount|tag|date)[ \\t]*(\\<|\\>|\\<=|\\>=|==|!=|~|!~|in)[ \\t]*[^;]+"
+    regex="(name|amount|tag|date|table)[ \\t]*(\\<|\\>|\\<=|\\>=|==|!=|~|!~|in)[ \\t]*[^;]+"
     [[ "${2}" =~ ${regex} ]] || {
 	echo "Invalid stats expression to check: '${2}'" >&2
 	return 1
     }
-    expression="$(sed -e "s/^name/\$2/" -e "s/^amount/\$3/" -e "s/^tag/\$4/" -e "s/^date/\$5/" <<< "${2}")"
+    expression="$(sed -e "s/^name/\$2/" -e "s/^amount/\$3/" -e "s/^tag/\$4/" -e "s/^date/\$5/" -e "s/^table/\$6/" <<< "${2}")"
     fieldNum="$(sed -e "s/\([^ \t]\+\).*/\1/" <<< "${expression}")"
     awk "BEGIN { FS=\",\"; OFS=\",\" } { line=\$0; gsub(/ /, \"\", ${fieldNum}); if(${expression}) { print line } }" "${1}" > "${1}_"
     mv "${1}_" "${1}"
@@ -262,7 +270,6 @@ declare TABLE_FILE=
 #    - Statistics about spending for all account (breakdown by tag, average table entry, average daily entry/grouped by date, any unexpectedly big values)
 #  - Add QOL features:
 #    - Removing accounts, tags and tables
-#    - Stats with no table selected runs stats for each table separately
 #    - Table file validation at select to know if anything invalid
 #    - Renaming tags, accounts and tables
 #    - Command history
@@ -580,9 +587,6 @@ do
 		    }
 		;;
 		*)
-		    # Before running stats functions, check that table selected
-		    verifyTable || continue
-
 		    # Run the actual stats function if found in the stats file
 		    grep "^${parsed[1]};" "${STATS_FILE}" > /dev/null && {
 			cmd="$(sed -ne "s/^${parsed[1]};\(.*\)/\1/p" "${STATS_FILE}")"
