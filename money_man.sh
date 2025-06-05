@@ -262,7 +262,6 @@ declare TABLE_FILE=
 #    - Statistics about spending for all account (breakdown by tag, average table entry, average daily entry/grouped by date, any unexpectedly big values)
 #  - Add QOL features:
 #    - Removing accounts, tags and tables
-#    - Unselect table, print with nothing selected prints everything
 #    - Stats with no table selected runs stats for each table separately
 #    - Table file validation at select to know if anything invalid
 #    - Renaming tags, accounts and tables
@@ -298,7 +297,7 @@ do
 	    echo "Table Commands:"
 	    echo " - list ............................... lists tables in the account, typically this would be months"
 	    echo " - select <table name> ................ selects the specified table from the account, if nonexistent, creates new table"
-	    echo " - print [num lines] .................. prints num lines of content from the current table, or all if blank or <0, sorted by date"
+	    echo " - print [num lines] .................. prints num lines of content from the current table (or all tables if none selected), or all if blank or <0, sorted by date"
 	    echo " - add <desc> <amount> <tag> <date> ... adds a line to the table with the given info, use quotes for spaces"
 	    echo " - rm <id to remove> .................. removes the line with the specified ID"
 	    echo ""
@@ -307,6 +306,7 @@ do
 	    echo " - tag [tag name] ..................... shows details about existing tag or creates new if nonexistent"
 	    echo " - export [file name] ................. exports the current table from the current account into a file with the given name"
 	    echo " - import <csv name> .................. imports the rows from the given CSV file (if compatible) into the current table in the current account"
+	    echo " - unselect <table|acc> ............... sets the current table or account to NONE"
 	    echo ""
 	    echo "Stats Commands:"
 	    echo " - stats <function name> .............. runs the given statistics function on the currently selected table and prints results"
@@ -450,14 +450,24 @@ do
 	;;
 
 	print)
-	    # Check if table selected
-	    verifyTable || continue
-
-	    # Print N lines
-	    [[ -z "${parsed[1]}" ]] && {
-		sort -k5r -t"," "${TABLE_FILE}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t
+	    # Check if table selected, otherwise print all
+	    verifyTable && {
+		# Print N lines
+		[[ -z "${parsed[1]}" ]] && {
+		    sort -k5r -t"," "${TABLE_FILE}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t
+		} || {
+		    sort -k5r -t"," "${TABLE_FILE}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t | head -n $((${parsed[1]}+1))
+		}
 	    } || {
-		sort -k5r -t"," "${TABLE_FILE}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t | head -n $((${parsed[1]}+1))
+		for file in $(find . -name "${ACC}-*" | sort); do
+		    echo "PRINTING TABLE $(echo ${file} | sed "s/\.\/${ACC}-\(.*\)\.csv/\1/"):"
+		    [[ -z "${parsed[1]}" ]] && {
+			sort -k5r -t"," "${file}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t
+		    } || {
+			sort -k5r -t"," "${file}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t | head -n $((${parsed[1]}+1))
+		    }
+		    echo "---"
+		done
 	    }
 	;;
 
@@ -622,6 +632,22 @@ do
 
 	    # Let the user know what import happened where
 	    echo "Imported table '${file}' into the currently selected table '${TABLE}'"
+	;;
+
+	unselect)
+	    [[ "${parsed[1]}" == "acc" ]] && {
+		echo "Unselected account"
+		ACC="none"
+		TABLE="none"
+	    } || {
+		[[ "${parsed[1]}" == "table" ]] && {
+		    echo "Unselected table"
+		    TABLE="none"
+		} || {
+		    echo "Please specify 'table' or 'acc' as the first argument"
+		    continue
+		}
+	    }
 	;;
 
 	*)
