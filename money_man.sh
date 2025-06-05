@@ -454,17 +454,17 @@ do
 	    verifyTable && {
 		# Print N lines
 		[[ -z "${parsed[1]}" ]] && {
-		    sort -k5r -t"," "${TABLE_FILE}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t
+		    sort -k5 -t"," "${TABLE_FILE}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t
 		} || {
-		    sort -k5r -t"," "${TABLE_FILE}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t | head -n $((${parsed[1]}+1))
+		    sort -k5 -t"," "${TABLE_FILE}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t | head -n $((${parsed[1]}+1))
 		}
 	    } || {
 		for file in $(find . -name "${ACC}-*" | sort); do
 		    echo "PRINTING TABLE $(echo ${file} | sed "s/\.\/${ACC}-\(.*\)\.csv/\1/"):"
 		    [[ -z "${parsed[1]}" ]] && {
-			sort -k5r -t"," "${file}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t
+			sort -k5 -t"," "${file}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t
 		    } || {
-			sort -k5r -t"," "${file}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t | head -n $((${parsed[1]}+1))
+			sort -k5 -t"," "${file}" | column -s"," -N"ID,Description,Amount,Tag,Date" -o" | " -t | head -n $((${parsed[1]}+1))
 		    }
 		    echo "---"
 		done
