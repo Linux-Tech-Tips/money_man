@@ -114,11 +114,11 @@ runStats() {
     mkdir -p ./.stats_tmp
     # Append table name as next column, join all tables if none selected
     verifyTable 2> /dev/null && {
-	sed -e "s/\$/, $(basename ${TABLE_FILE})/" ${TABLE_FILE} > "./.stats_tmp/${TABLE_FILE}"
+	sed -e "s/\$/, $(basename ${TABLE_FILE%.*})/" ${TABLE_FILE} > "./.stats_tmp/${TABLE_FILE}"
     } || {
 	touch "./.stats_tmp/${ACC}.csv"
 	for file in ${ACC}-*; do
-	    sed -e "s/\$/, ${file}/" ${file} >> "./.stats_tmp/${ACC}.csv"
+	    sed -e "s/\$/, ${file%.*}/" ${file} >> "./.stats_tmp/${ACC}.csv"
 	done
     }
     pushd ./.stats_tmp > /dev/null
@@ -173,7 +173,7 @@ runStats() {
 tableGroup() {
     dirname="${1%.*}"
     mkdir -p "${dirname}"
-    awk "BEGIN { FS=\",\"; OFS=\",\" } { if(NF == 5) { name = \$${2}; gsub(/ /, \"\", name); print \$0 >> \"${dirname}/\"name\".csv\"; } }" "${1}"
+    awk "BEGIN { FS=\",\"; OFS=\",\" } { if(NF == 6) { name = \$${2}; gsub(/ /, \"\", name); print \$0 >> \"${dirname}/\"name\".csv\"; } }" "${1}"
     rm "${1}"
 }
 
@@ -195,6 +195,8 @@ tableCheck() {
     fieldNum="$(sed -e "s/\([^ \t]\+\).*/\1/" <<< "${expression}")"
     awk "BEGIN { FS=\",\"; OFS=\",\" } { line=\$0; gsub(/ /, \"\", ${fieldNum}); if(${expression}) { print line } }" "${1}" > "${1}_"
     mv "${1}_" "${1}"
+    # Removing the resulting file if empty
+    [[ -s "${1}" ]] || rm "${1}"
 }
 
 # Collapse the table given by ${1} by the function given in ${2} (can be <avg | min | max | sum | count>) on the 'amount' field
@@ -205,7 +207,7 @@ tableCollapse() {
     case "${2}" in
 	"avg")
 	    itCode='sum += $3'
-	    endCode='print sum/NR'
+	    endCode='if(NR > 0) { print sum/NR } else { print 0 }'
 	;;
 	"min")
 	    itCode='if($3 < min) { min = $3 }'
@@ -226,7 +228,8 @@ tableCollapse() {
     result="$(awk -F, "{ ${itCode} } END { ${endCode} }" "${1}")"
     tags="$(awk -F, "{ arr[\$4] = \"\"; } END { for(i in arr) { printf i; }; print \"\" }" "${1}")"
     dates="$(awk -F, "{ arr[\$5] = \"\"; } END { for(i in arr) { printf i; }; print \"\" }" "${1}")"
-    echo "0, table ${2}, ${result}, ${tags}, ${dates}" > "${1}"
+    tables="$(awk -F, "{ arr[\$6] = \"\"; } END { for(i in arr) { printf i; }; print \"\" }" "${1}")"
+    echo "0, table ${2}, ${result}, ${tags}, ${dates}, ${tables}" > "${1}"
 }
 
 # Select only the columns given in ${2} (comma-separated column number list) of the table given by ${1}
